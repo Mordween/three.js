@@ -6,7 +6,7 @@ cd three.js
 npx vite
 ```
 
-And open WebBrowser and use this URL : 
+Open a web browser and use this URL:
 ```
 localhost:5173
 ```
