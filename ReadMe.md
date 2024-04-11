@@ -1,5 +1,0 @@
-# three.js
-
-```
-npx vite
-```
