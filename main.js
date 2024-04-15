@@ -85,39 +85,6 @@ function loadURDFObject(ob, i)
 
         object.position.set(ob.position.X[i], ob.position.Y[i], ob.position.Z[i])
 
-
-        // let mass = 1
-        // //Ammojs Section
-        // let transform = new Ammo.btTransform();
-        // transform.setIdentity();
-        // transform.setOrigin( new Ammo.btVector3( ob.position.X[i], ob.position.Y[i], ob.position.Z[i] ) );
-        // transform.setRotation( new Ammo.btQuaternion( ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i], 1 ) );
-        // let motionState = new Ammo.btDefaultMotionState( transform );
-
-        // let colShape = new Ammo.btBoxShape( 1 );
-        // let colShape1 = new Ammo.btBoxShape(object);          // TODO vérifier que ça donne bien la collision de l'objet// ça donne pas la bonne collision 
-        // colShape.setMargin( 0.05 );
-
-        // let localInertia = new Ammo.btVector3( 0, 0, 0 );
-        // colShape1.calculateLocalInertia( mass, localInertia );       //BUG si je met le shape de mon objet, il passe au travers du sol ... 
-
-
-        // let rbInfo = new Ammo.btRigidBodyConstructionInfo( 1 /*mass*/ , motionState, colShape1, localInertia );
-        // let body = new Ammo.btRigidBody( rbInfo );
-
-        // body.setFriction(4);
-        // body.setRollingFriction(10);
-
-        // body.setActivationState( STATE.DISABLE_DEACTIVATION )
-
-
-        // physicsWorld.addRigidBody( body, colGroupObject, colGroupFloor | colGroupRobot);
-
-        // object.userData.physicsBody = body;
-        // rigidBodies.push(object);
-
-        // body.threeObject = object;
-
       }
     );
 

@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "enable3d": "^0.25.4",
     "three": "^0.163.0",
     "urdf-loader": "^0.12.1"
   },
