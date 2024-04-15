@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "three": "^0.163.0"
+    "three": "^0.163.0",
+    "urdf-loader": "^0.12.1"
   },
   "devDependencies": {
     "vite": "^5.2.8"

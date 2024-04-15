@@ -2,72 +2,155 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
+import { LoadingManager } from 'three';
+import URDFLoader from 'urdf-loader';
+
+
 const stlloader = new STLLoader();
 var cube, controls, scene, camera, renderer, clock;
 
 let physicsWorld; 
 
-let colGroupPlane = 1, colGroupRedBall = 2, colGroupGreenBall = 4
+let colGroupPlane = 1, colGroupRobot = 1
 
 var position = new THREE.Vector3;
 
 var rigidBodies = [], tmpTrans;
 
+let ballObject = null, 
+moveDirection = { left: 0, right: 0, forward: 0, back: 0 }
+const STATE = { DISABLE_DEACTIVATION : 4 }
 
-let meshPosition = {
-	x : '0',
-	y : '0',
-	z : '0'
-}
-let meshRotation = {
-	x : '0',
-	y : '0',
-	z : '0'
-}
+let kObject = null, 
+kMoveDirection = { left: 0, right: 0, forward: 0, back: 0 }, 
+tmpPos = new THREE.Vector3(), tmpQuat = new THREE.Quaternion();
 
+const FLAGS = { CF_KINEMATIC_OBJECT: 2 }
+
+let ammoTmpPos = null, ammoTmpQuat = null;
 
 //Ammojs Initialization
 Ammo().then( start )
 
 
+function loadURDF()
+{
+    const manager = new LoadingManager();
+    const loader = new URDFLoader( manager );
+    loader.packages = {
+        packageName : './package/dir/'              // The equivalent of a (list of) ROS package(s):// directory
+    };
+    loader.load(
+      'ufactory_description/lite6/urdf/lite6.urdf', // The path to the URDF within the package OR absolute                       
+      robot => {
+    
+        // The robot is loaded!
+        scene.add( robot );
+
+        //console.log(robot.joints)
+        robot.setJointValue('joint2', 3.141);   // need to put le full name of the joint
+        console.log(robot.position)
+        robot.position.set(1,1,1)
+        console.log(robot.joints)
+    
+      }
+    );
+}
+
 
 function display()
 {
-	meshPosition.x = 0; meshPosition.y = 3.5; meshPosition.z = 0;
-	meshRotation.x = -3.14159/2; meshRotation.y = 0; meshRotation.z = 0;
-	loadObject('/lite6/visual/base.stl', meshPosition, meshRotation);
+    let ob = {
+        url: [
+            '/pathToYourURDFObject',
+        ],
+        position: {
+            X : [0],
+            Y : [0],
+            Z : [0]
+        },
+        rotation: {
+            X : [0],
+            Y : [0],
+            Z : [0]
+        },
+
+    };
+
+    for (let i = 0; i< ob.url.length; i++)
+    {
+        let body = loadObject(ob, i);
+    }
+
+
 }
 
 function start()
 {
 	tmpTrans = new Ammo.btTransform();
+	ammoTmpPos = new Ammo.btVector3();
+	ammoTmpQuat = new Ammo.btQuaternion();
 	setupPhysicsWorld();
 	setupGraphics();
+    loadURDF();
 	createBlock();
-	createBall();
-	createMaskBall();
-	
-	display()
+
+	setupEventHandlers();
+
+	//display();
     renderFrame();
 }
 
 
 // Object
-function loadObject (url,  meshPosition, meshRotation){
-	stlloader.load(url, function(geometry){
+function loadObject (ob, i){
+    stlloader.load(ob.url[i], function(geometry){
+        let mass = 1.65393501783165;
 
-		var material = new THREE.MeshPhongMaterial( { ambient: 0xff5533, color: 0xff5533, specular: 0x111111, shininess: 200, opacity:1 } );
-		var mesh = new THREE.Mesh( geometry, material );
-		mesh.castShadow = true;
-		mesh.receiveShadow = true;
-		mesh.scale.set(1, 1, 1)
-		mesh.position.set(meshPosition.x, meshPosition.y, meshPosition.z);
-		mesh.rotation.set(meshRotation.x, meshRotation.y, meshRotation.z);
-		console.log("position: ", mesh.position.x, mesh.position.y, mesh.position.z)
-		console.log("scale : ", mesh.scale)
-		console.log("alpha : ", mesh.alpha)
-		scene.add( mesh );
-	});
+        var material = new THREE.MeshPhongMaterial( { ambient: 0xffffff, color: 0xffffff, specular: 0x111111, shininess: 200, opacity:1 } );
+        var mesh = new THREE.Mesh( geometry, material );
+        console.log("mesh :", mesh)
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.scale.set(1, 1, 1)
+        mesh.position.set(ob.position.X[i], ob.position.Y[i], ob.position.Z[i]);
+        mesh.rotation.set(ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i]);
+        scene.add( mesh );
+
+
+        //Ammojs Section
+        let transform = new Ammo.btTransform();
+        transform.setIdentity();
+        transform.setOrigin( new Ammo.btVector3( ob.position.X[i], ob.position.Y[i], ob.position.Z[i] ) );
+        transform.setRotation( new Ammo.btQuaternion( ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i], 1 ) );
+        let motionState = new Ammo.btDefaultMotionState( transform );
+
+        let colShape = new Ammo.btSphereShape( 1 );
+        let colShape1 = new Ammo.btBoxShape(mesh);          // TODO vérifier que ça donne bien la collision de l'objet// ça donne pas la bonne collision 
+        colShape.setMargin( 0.05 );
+
+        let localInertia = new Ammo.btVector3( 0, 0, 0 );
+        //colShape.calculateLocalInertia( mass, localInertia );       //BUG si je met le shape de mon objet, il passe au travers du sol ... 
+
+
+        let rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, mesh, localInertia );
+        let body = new Ammo.btRigidBody( rbInfo );
+
+        body.setFriction(4);
+        body.setRollingFriction(10);
+
+        body.setActivationState( STATE.DISABLE_DEACTIVATION )
+
+
+        physicsWorld.addRigidBody( body, colGroupRobot, colGroupPlane );
+        rigidBodies.push(mesh);
+
+        mesh.userData.physicsBody = body;
+        
+        body.threeObject = mesh;
+
+        return body;
+    });
 }
 
 
@@ -79,7 +162,7 @@ function setupPhysicsWorld(){
         solver                  = new Ammo.btSequentialImpulseConstraintSolver();
 
     physicsWorld           = new Ammo.btDiscreteDynamicsWorld(dispatcher, overlappingPairCache, solver, collisionConfiguration);
-    physicsWorld.setGravity(new Ammo.btVector3(0, -10, 0));
+    physicsWorld.setGravity(new Ammo.btVector3(0, 0, -10));
 
 }
 
@@ -94,14 +177,15 @@ function setupGraphics(){
     scene.background = new THREE.Color( 0xbfd1e5 );
 
 	// Ground
-	var plane = new THREE.Mesh( new THREE.PlaneGeometry( 40, 40 ), new THREE.MeshPhongMaterial( { ambient: 0x999999, color: 0x999999, specular: 0x101010 } ) );
-	plane.rotation.x = -Math.PI/2;
-	plane.position.y = 0;
-	scene.add( plane );
+	//var plane = new THREE.Mesh( new THREE.PlaneGeometry( 40, 40 ), new THREE.MeshPhongMaterial( { ambient: 0x999999, color: 0x999999, specular: 0x101010 } ) );
+	//plane.rotation.x = -Math.PI/2;
+	//plane.position.y = 0;
+	//scene.add( plane );
 
     //create camera
     camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
-    camera.position.set(3,3,3);
+    camera.up.set(0,0,1)
+    camera.position.set(2,2,1);
     camera.lookAt(new THREE.Vector3(0, 0, 0));
 
     //Add hemisphere light
@@ -169,8 +253,8 @@ function renderFrame(){
 
 function createBlock(){
     
-    let pos = {x: 0, y: 0, z: 0};
-    let scale = {x: 50, y: 2, z: 50};
+    let pos = {x: 0, y: 0, z: -1};
+    let scale = {x: 150, y: 150, z: 2};
     let quat = {x: 0, y: 0, z: 0, w: 1};
     let mass = 0;
 
@@ -202,91 +286,99 @@ function createBlock(){
     let rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, colShape, localInertia );
     let body = new Ammo.btRigidBody( rbInfo );
 
+	body.setFriction(4);
+	body.setRollingFriction(10);
 
-    physicsWorld.addRigidBody( body, colGroupPlane, colGroupRedBall );
+    physicsWorld.addRigidBody( body, colGroupPlane, colGroupRobot );
+}
+
+function setupEventHandlers(){
+
+    window.addEventListener( 'keydown', handleKeyDown, false);
+    window.addEventListener( 'keyup', handleKeyUp, false);
+
 }
 
 
-function createBall(){
-    
-    let pos = {x: 0, y: 20, z: 0};
-    let radius = 2;
-    let quat = {x: 0, y: 0, z: 0, w: 1};
-    let mass = 1;
+function handleKeyDown(event){
 
-    //threeJS Section
-    let ball = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshPhongMaterial({color: 0xff0505}));
+    let keyCode = event.keyCode;
 
-    ball.position.set(pos.x, pos.y, pos.z);
-    
-    ball.castShadow = true;
-    ball.receiveShadow = true;
+    switch(keyCode){
 
-    scene.add(ball);
+        case 90: //W: FORWARD
+            moveDirection.forward = 1
+            break;
 
+        case 83: //S: BACK
+            moveDirection.back = 1
+            break;
 
-    //Ammojs Section
-    let transform = new Ammo.btTransform();
-    transform.setIdentity();
-    transform.setOrigin( new Ammo.btVector3( pos.x, pos.y, pos.z ) );
-    transform.setRotation( new Ammo.btQuaternion( quat.x, quat.y, quat.z, quat.w ) );
-    let motionState = new Ammo.btDefaultMotionState( transform );
+        case 81: //Q: LEFT
+            moveDirection.left = 1
+            break;
 
-    let colShape = new Ammo.btSphereShape( radius );
-    colShape.setMargin( 0.05 );
+        case 68: //D: RIGHT
+            moveDirection.right = 1
+            break;
 
-    let localInertia = new Ammo.btVector3( 0, 0, 0 );
-    colShape.calculateLocalInertia( mass, localInertia );
-
-    let rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, colShape, localInertia );
-    let body = new Ammo.btRigidBody( rbInfo );
-
-
-    physicsWorld.addRigidBody( body, colGroupRedBall, colGroupPlane | colGroupGreenBall );
-    
-    ball.userData.physicsBody = body;
-    rigidBodies.push(ball);
+		case 38: //↑: FORWARD
+			kMoveDirection.forward = 1
+			break;
+			
+		case 40: //↓: BACK
+			kMoveDirection.back = 1
+			break;
+		
+		case 37: //←: LEFT
+			kMoveDirection.left = 1
+			break;
+		
+		case 39: //→: RIGHT
+			kMoveDirection.right = 1
+			break;
+    }
 }
 
-function createMaskBall(){
-    
-    let pos = {x: 1, y: 30, z: 0};
-    let radius = 2;
-    let quat = {x: 0, y: 0, z: 0, w: 1};
-    let mass = 1;
 
-    //threeJS Section
-    let ball = new THREE.Mesh(new THREE.SphereGeometry(radius), new THREE.MeshPhongMaterial({color: 0x00ff08}));
+function handleKeyUp(event){
+    let keyCode = event.keyCode;
 
-    ball.position.set(pos.x, pos.y, pos.z);
-    
-    ball.castShadow = true;
-    ball.receiveShadow = true;
+    switch(keyCode){
+        case 90: //FORWARD
+            moveDirection.forward = 0
+            break;
 
-    scene.add(ball);
+        case 83: //BACK
+            moveDirection.back = 0
+            break;
 
+        case 81: //LEFT
+            moveDirection.left = 0
+            break;
 
-    //Ammojs Section
-    let transform = new Ammo.btTransform();
-    transform.setIdentity();
-    transform.setOrigin( new Ammo.btVector3( pos.x, pos.y, pos.z ) );
-    transform.setRotation( new Ammo.btQuaternion( quat.x, quat.y, quat.z, quat.w ) );
-    let motionState = new Ammo.btDefaultMotionState( transform );
+        case 68: //RIGHT
+            moveDirection.right = 0
+            break;
 
-    let colShape = new Ammo.btSphereShape( radius );
-    colShape.setMargin( 0.05 );
+		case 38: //↑: FORWARD
+			kMoveDirection.forward = 0
+			break;
+			
+		case 40: //↓: BACK
+			kMoveDirection.back = 0
+			break;
+			
+		case 37: //←: LEFT
+			kMoveDirection.left = 0
+			break;
+			
+		case 39: //→: RIGHT
+			kMoveDirection.right = 0
+			break;
 
-    let localInertia = new Ammo.btVector3( 0, 0, 0 );
-    colShape.calculateLocalInertia( mass, localInertia );
+    }
 
-    let rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, colShape, localInertia );
-    let body = new Ammo.btRigidBody( rbInfo );
-
-
-    physicsWorld.addRigidBody( body, colGroupGreenBall, colGroupRedBall);
-    
-    ball.userData.physicsBody = body;
-    rigidBodies.push(ball);
 }
 
 
