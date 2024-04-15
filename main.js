@@ -1,17 +1,23 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 
 import { LoadingManager } from 'three';
 import URDFLoader from 'urdf-loader';
 
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 
-const stlloader = new STLLoader();
-var cube, controls, scene, camera, renderer, clock;
+
+const manager = new LoadingManager();
+const loader = new URDFLoader( manager );
+
+const objectManager = new LoadingManager();
+const objectLoader = new URDFLoader( objectManager );
+
+var cube, controls, scene, camera, renderer, clock, transformControls;
 
 let physicsWorld; 
 
-let colGroupPlane = 1, colGroupRobot = 1
+let colGroupFloor = 1, colGroupRobot = 1, colGroupObject = 1
 
 var position = new THREE.Vector3;
 
@@ -35,8 +41,6 @@ Ammo().then( start )
 
 function loadURDF()
 {
-    const manager = new LoadingManager();
-    const loader = new URDFLoader( manager );
     loader.packages = {
         packageName : './package/dir/'              // The equivalent of a (list of) ROS package(s):// directory
     };
@@ -47,42 +51,104 @@ function loadURDF()
         // The robot is loaded!
         scene.add( robot );
 
+        transformControls = new TransformControls( camera, renderer.domElement );
+        transformControls.size = 0.75;
+        transformControls.showX = false;
+        transformControls.space = 'world';
+        transformControls.attach( robot.links['link_eef']);
+        scene.add( transformControls );
+
+        // disable orbitControls while using transformControls
+        transformControls.addEventListener( 'mouseDown', () => controls.enabled = false );
+        transformControls.addEventListener( 'mouseUp', () => controls.enabled = true );
+
         //console.log(robot.joints)
-        robot.setJointValue('joint2', 3.141);   // need to put le full name of the joint
-        console.log(robot.position)
-        robot.position.set(1,1,1)
-        console.log(robot.joints)
+        //robot.setJointValue('joint2', 3.141);   // need to put le full name of the joint
+        robot.position.set(0,0,0.63)
     
       }
     );
 }
 
 
-function display()
+function loadURDFObject(ob, i)
+{
+    objectLoader.packages = {
+        packageName : './package/dir/'              // The equivalent of a (list of) ROS package(s):// directory
+    };
+    objectLoader.load(
+        ob.url[i], // The path to the URDF within the package OR absolute                       
+        object => {
+    
+        // The robot is loaded!
+        scene.add( object );
+
+        object.position.set(ob.position.X[i], ob.position.Y[i], ob.position.Z[i])
+
+
+        // let mass = 1
+        // //Ammojs Section
+        // let transform = new Ammo.btTransform();
+        // transform.setIdentity();
+        // transform.setOrigin( new Ammo.btVector3( ob.position.X[i], ob.position.Y[i], ob.position.Z[i] ) );
+        // transform.setRotation( new Ammo.btQuaternion( ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i], 1 ) );
+        // let motionState = new Ammo.btDefaultMotionState( transform );
+
+        // let colShape = new Ammo.btBoxShape( 1 );
+        // let colShape1 = new Ammo.btBoxShape(object);          // TODO vérifier que ça donne bien la collision de l'objet// ça donne pas la bonne collision 
+        // colShape.setMargin( 0.05 );
+
+        // let localInertia = new Ammo.btVector3( 0, 0, 0 );
+        // colShape1.calculateLocalInertia( mass, localInertia );       //BUG si je met le shape de mon objet, il passe au travers du sol ... 
+
+
+        // let rbInfo = new Ammo.btRigidBodyConstructionInfo( 1 /*mass*/ , motionState, colShape1, localInertia );
+        // let body = new Ammo.btRigidBody( rbInfo );
+
+        // body.setFriction(4);
+        // body.setRollingFriction(10);
+
+        // body.setActivationState( STATE.DISABLE_DEACTIVATION )
+
+
+        // physicsWorld.addRigidBody( body, colGroupObject, colGroupFloor | colGroupRobot);
+
+        // object.userData.physicsBody = body;
+        // rigidBodies.push(object);
+
+        // body.threeObject = object;
+
+      }
+    );
+
+}
+
+
+function displayURDF()
 {
     let ob = {
         url: [
-            '/pathToYourURDFObject',
+            'urdfObjects/table.urdf',
+            //'urdfObjects/duck_vhacd.urdf'
         ],
         position: {
-            X : [0],
-            Y : [0],
-            Z : [0]
+            X : [0, 0.2],
+            Y : [0, 0.3],
+            Z : [0, 1]
         },
         rotation: {
-            X : [0],
-            Y : [0],
-            Z : [0]
+            X : [0, 0],
+            Y : [0, 0],
+            Z : [0, 0]
         },
 
     };
 
+    
     for (let i = 0; i< ob.url.length; i++)
     {
-        let body = loadObject(ob, i);
+        loadURDFObject(ob, i);
     }
-
-
 }
 
 function start()
@@ -92,67 +158,16 @@ function start()
 	ammoTmpQuat = new Ammo.btQuaternion();
 	setupPhysicsWorld();
 	setupGraphics();
+
     loadURDF();
-	createBlock();
+    displayURDF();
+
+	createFloor();
 
 	setupEventHandlers();
 
-	//display();
     renderFrame();
 }
-
-
-// Object
-function loadObject (ob, i){
-    stlloader.load(ob.url[i], function(geometry){
-        let mass = 1.65393501783165;
-
-        var material = new THREE.MeshPhongMaterial( { ambient: 0xffffff, color: 0xffffff, specular: 0x111111, shininess: 200, opacity:1 } );
-        var mesh = new THREE.Mesh( geometry, material );
-        console.log("mesh :", mesh)
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        mesh.scale.set(1, 1, 1)
-        mesh.position.set(ob.position.X[i], ob.position.Y[i], ob.position.Z[i]);
-        mesh.rotation.set(ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i]);
-        scene.add( mesh );
-
-
-        //Ammojs Section
-        let transform = new Ammo.btTransform();
-        transform.setIdentity();
-        transform.setOrigin( new Ammo.btVector3( ob.position.X[i], ob.position.Y[i], ob.position.Z[i] ) );
-        transform.setRotation( new Ammo.btQuaternion( ob.rotation.X[i], ob.rotation.X[i], ob.rotation.X[i], 1 ) );
-        let motionState = new Ammo.btDefaultMotionState( transform );
-
-        let colShape = new Ammo.btSphereShape( 1 );
-        let colShape1 = new Ammo.btBoxShape(mesh);          // TODO vérifier que ça donne bien la collision de l'objet// ça donne pas la bonne collision 
-        colShape.setMargin( 0.05 );
-
-        let localInertia = new Ammo.btVector3( 0, 0, 0 );
-        //colShape.calculateLocalInertia( mass, localInertia );       //BUG si je met le shape de mon objet, il passe au travers du sol ... 
-
-
-        let rbInfo = new Ammo.btRigidBodyConstructionInfo( mass, motionState, mesh, localInertia );
-        let body = new Ammo.btRigidBody( rbInfo );
-
-        body.setFriction(4);
-        body.setRollingFriction(10);
-
-        body.setActivationState( STATE.DISABLE_DEACTIVATION )
-
-
-        physicsWorld.addRigidBody( body, colGroupRobot, colGroupPlane );
-        rigidBodies.push(mesh);
-
-        mesh.userData.physicsBody = body;
-        
-        body.threeObject = mesh;
-
-        return body;
-    });
-}
-
 
 function setupPhysicsWorld(){
 
@@ -251,7 +266,7 @@ function renderFrame(){
 }
 
 
-function createBlock(){
+function createFloor(){
     
     let pos = {x: 0, y: 0, z: -1};
     let scale = {x: 150, y: 150, z: 2};
@@ -289,7 +304,7 @@ function createBlock(){
 	body.setFriction(4);
 	body.setRollingFriction(10);
 
-    physicsWorld.addRigidBody( body, colGroupPlane, colGroupRobot );
+    physicsWorld.addRigidBody( body, colGroupFloor, colGroupRobot | colGroupObject);
 }
 
 function setupEventHandlers(){
