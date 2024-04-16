@@ -5,6 +5,9 @@ import { LoadingManager } from 'three';
 import URDFLoader from 'urdf-loader';
 
 
+import { Project, Scene3D, PhysicsLoader } from 'enable3d'
+
+
 const manager = new LoadingManager();
 const loader = new URDFLoader( manager );
 
@@ -49,7 +52,7 @@ function loadURDF()
     
         // The robot is loaded!
         scene.add( robot );
-        
+
         //console.log(robot.joints)
         //robot.setJointValue('joint2', 3.141);   // need to put le full name of the joint
         robot.position.set(0,0,0.63)
