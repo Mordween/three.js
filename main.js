@@ -4,8 +4,6 @@ import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { LoadingManager } from 'three';
 import URDFLoader from 'urdf-loader';
 
-import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-
 
 const manager = new LoadingManager();
 const loader = new URDFLoader( manager );
@@ -35,6 +33,7 @@ const FLAGS = { CF_KINEMATIC_OBJECT: 2 }
 
 let ammoTmpPos = null, ammoTmpQuat = null;
 
+
 //Ammojs Initialization
 Ammo().then( start )
 
@@ -50,18 +49,7 @@ function loadURDF()
     
         // The robot is loaded!
         scene.add( robot );
-
-        transformControls = new TransformControls( camera, renderer.domElement );
-        transformControls.size = 0.75;
-        transformControls.showX = false;
-        transformControls.space = 'world';
-        transformControls.attach( robot.links['link_eef']);
-        scene.add( transformControls );
-
-        // disable orbitControls while using transformControls
-        transformControls.addEventListener( 'mouseDown', () => controls.enabled = false );
-        transformControls.addEventListener( 'mouseUp', () => controls.enabled = true );
-
+        
         //console.log(robot.joints)
         //robot.setJointValue('joint2', 3.141);   // need to put le full name of the joint
         robot.position.set(0,0,0.63)
